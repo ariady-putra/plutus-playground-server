@@ -1,1 +1,1 @@
-/home/ariady/plutus-apps/plutus-playground-server/app/
+../../../plutus-apps/plutus-playground-server/app/
