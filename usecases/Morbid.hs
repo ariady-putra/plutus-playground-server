@@ -22,7 +22,7 @@ A dead-man's switch contract where you can Create Chest
 and the chest can only be unlocked after a period of time
 of not being postponed. You can also Add Treasure to the
 chest. Anyone can redeem the treasure when the deadline
-has passed.
+had passed.
 -}
 
 import Control.Monad (void)
@@ -88,7 +88,17 @@ data DelayUnlock
     , ToSchema
     , ToArgument
     )
-type UnlockChest = ()
+type UnlockChest = () -- anyone can unlock the chest when the deadline had passed
+
+-- | Contract actions enum
+data MorbidAction
+    = ActionCreateChest
+    | ActionAddTreasure
+    | ActionDelayUnlock
+    | ActionUnlockChest
+    deriving Show
+PlutusTx.unstableMakeIsData ''MorbidAction
+PlutusTx.makeLift ''MorbidAction
 
 -- | Datum parameters
 data ChestDatum
@@ -101,17 +111,15 @@ data ChestDatum
 PlutusTx.unstableMakeIsData ''ChestDatum
 
 -- | Redeemer parameters
-newtype ChestRedeemer
+data ChestRedeemer
     = ChestRedeemer
-    { _redeemTime :: Ledger.POSIXTime
+    { _redeemTime     :: Ledger.POSIXTime
+    , _redeemPKH      :: Ledger.PaymentPubKeyHash
+    , _redeemPassword :: BuiltinByteString
+    , _redeemAction   :: MorbidAction
     }
     deriving Show
-    deriving newtype
-    ( PlutusTx.FromData
-    , PlutusTx.ToData
-    , PlutusTx.UnsafeFromData
-    )
-PlutusTx.makeLift ''ChestRedeemer
+PlutusTx.unstableMakeIsData ''ChestRedeemer
 
 data Morbid
 instance Scripts.ValidatorTypes Morbid where
@@ -123,10 +131,19 @@ instance Scripts.ValidatorTypes Morbid where
 {-# INLINABLE validate #-}
 validate :: ChestDatum -> ChestRedeemer -> ScriptContext ->
     Bool
-validate datum redeemer context = True {-traceBool
-    "Chest is eligible to be unlocked, congrats!"
-    "Chest deadline has not been reached yet!"
-    $ _chestDeadline datum <= _redeemTime redeemer-}
+validate datum redeemer context =
+    case _redeemAction redeemer of
+        ActionCreateChest -> True -- off-chain validation
+        ActionAddTreasure -> True -- anyone can add treasures
+        ActionDelayUnlock -> traceIfFalse -- just validate either owner or password
+            "On-chain validation ERROR ActionDelayUnlock: You're not the chest creator or Invalid Password" $
+            _chestCreator  datum == _redeemPKH      redeemer ||
+            _chestPassword datum == _redeemPassword redeemer
+        ActionUnlockChest -> traceIfFalse -- just validate deadline
+            "On-chain validation ERROR ActionUnlockChest: Chest deadline has not been reached yet!" $
+            _chestDeadline datum <= _redeemTime redeemer
+        
+    
 
 typedValidator :: Scripts.TypedValidator Morbid
 typedValidator = Scripts.mkTypedValidator @Morbid
@@ -185,26 +202,6 @@ isChestAvailable :: (AsContractError x) =>
     MorbidContract x Bool
 isChestAvailable = utxosAt contractAddress >>= return . Haskell.not . M.null
 
--- | DEPRECATED: Modify chest state
-accessChest :: (AsContractError x) =>
-    Ledger.PaymentPubKeyHash -> Integer -> Value -> Haskell.String ->
-    MorbidContract x ()
-accessChest pkh slot deposit message = do
-    now <- currentTime
-    logStrShowAs logInfo "Curr slot time = " now
-    
-    --  let you = ChestDatum $ now + Haskell.fromInteger (slot * 1_000) -- 2_592_000_000 -- 30 x 24 x 3600 x 1000ms
-    let you = ChestDatum
-            { _chestDeadline = now + Haskell.fromInteger (slot * 1_000)
-            , _chestCreator  = pkh
-            , _chestPassword = hashString message
-            }
-        txn = you `mustPayToTheScript` deposit
-    logStrAs logInfo message
-    
-    logShowAs logInfo you
-    void $ submitTxConstraints typedValidator txn
-
 type WhenTrue  = MorbidContract
 type WhenFalse = MorbidContract
 -- | Do action based on chest existence
@@ -255,7 +252,7 @@ createChest = endpoint @"1. Create Chest" $ \ params -> do
             
             logStrShowAs logInfo "Creating chest for " you
             void $ submitTxConstraints typedValidator txn
-        )   -- (accessChest pkh deadline initialDeposit "Creating Chest")
+        )
     
 
 -- | Add Treasure contract endpoint, anyone can deposit treasures to the chest
@@ -268,18 +265,31 @@ addTreasure = endpoint @"2. Add Treasure" $ \ params -> do
             
             case (getChestDatumFrom utxoS, [(txOutRef, scriptChainIndexTxOut) | (txOutRef, scriptChainIndexTxOut) <- M.toList utxoS]) of
                 (Just you@(ChestDatum chestDeadline chestCreator chestKey), (txOutRef, scriptChainIndexTxOut):_) -> do
-                    let validity =  (unspentOutputs $ txOutRef `M.singleton` scriptChainIndexTxOut
-                                    ) Haskell.<>
-                                    (typedValidatorLookups typedValidator
-                                    ) Haskell.<>
-                                    (otherScript contractValidator
-                                    )
-                        txn =   (you `mustPayToTheScript` (_ciTxOutValue scriptChainIndexTxOut + _deposit params)
-                                ) <>
-                                (mustSpendScriptOutput txOutRef (Ledger.Redeemer $ PlutusTx.toBuiltinData ChestRedeemer { _redeemTime = chestDeadline })
-                                ) <>
-                                (mustIncludeDatum (Ledger.Datum $ PlutusTx.toBuiltinData you)
-                                )
+                    pkh <- ownPaymentPubKeyHash
+                    logStrShowAs logInfo "OwnPubKeyHash is " pkh
+
+                    let validity       =    (unspentOutputs $ txOutRef `M.singleton` scriptChainIndexTxOut
+                                            ) Haskell.<>
+                                            (typedValidatorLookups typedValidator
+                                            ) Haskell.<>
+                                            (otherScript contractValidator
+                                            )
+                        builinDatum    = Ledger.Datum
+                                        $ PlutusTx.toBuiltinData you
+                        builinRedeemer = Ledger.Redeemer
+                                        $ PlutusTx.toBuiltinData
+                                            ChestRedeemer
+                                            { _redeemTime     = chestDeadline
+                                            , _redeemPKH      = pkh
+                                            , _redeemPassword = hashString ""
+                                            , _redeemAction   = ActionAddTreasure
+                                            }
+                        txn            =    (you `mustPayToTheScript` (_ciTxOutValue scriptChainIndexTxOut + _deposit params)
+                                            ) <>
+                                            (mustSpendScriptOutput txOutRef builinRedeemer
+                                            ) <>
+                                            (mustIncludeDatum builinDatum
+                                            )
                     logStrShowAs logInfo "Adding treasure for " you
                     void $ submitTxConstraintsWith @Morbid validity txn
                 _ -> do
@@ -289,7 +299,7 @@ addTreasure = endpoint @"2. Add Treasure" $ \ params -> do
         (logStrAs logError "ERROR addTreasure: There is no chest yet, please create one first!")
     
 
--- | Delay Unlock contract endpoint, not anyone can postpone the chest unlocking
+-- | Delay Unlock contract endpoint, not anyone can postpone the chest unlocking deadline
 delayUnlock :: (AsContractError x) =>
     MorbidPromise x ()
 delayUnlock = endpoint @"3. Delay Unlock" $ \ params -> do
@@ -304,31 +314,35 @@ delayUnlock = endpoint @"3. Delay Unlock" $ \ params -> do
                     pkh <- ownPaymentPubKeyHash
                     logStrShowAs logInfo "OwnPubKeyHash is " pkh
                     
-                    if chestKey == (hashString $ _password params)
-                    -- if pkh == chestCreator
-                        then do
-                            now <- currentTime
-                            logStrShowAs logInfo "Curr slot time = " now
-                            
-                            let deadline =  now + Haskell.fromInteger (_postponeForSlots params * 1_000)
-                                validity =  (unspentOutputs $ txOutRef `M.singleton` scriptChainIndexTxOut
+                    now <- currentTime
+                    logStrShowAs logInfo "Curr slot time = " now
+                    
+                    let deadline       =    now + Haskell.fromInteger (_postponeForSlots params * 1_000)
+                        validity       =    (unspentOutputs $ txOutRef `M.singleton` scriptChainIndexTxOut
                                             ) Haskell.<>
                                             (typedValidatorLookups typedValidator
                                             ) Haskell.<>
                                             (otherScript contractValidator
                                             )
-                                you = d { _chestDeadline = deadline }
-                                txn =   (you `mustPayToTheScript` (_ciTxOutValue scriptChainIndexTxOut)
-                                        ) <>
-                                        (mustSpendScriptOutput txOutRef (Ledger.Redeemer $ PlutusTx.toBuiltinData ChestRedeemer { _redeemTime = deadline })
-                                        ) <>
-                                        (mustIncludeDatum (Ledger.Datum $ PlutusTx.toBuiltinData you)
-                                        )
-                            logStrShowAs logInfo "Delaying unlock for " you
-                            void $ submitTxConstraintsWith @Morbid validity txn
-                        else do
-                            -- logStrAs logError "ERROR delayUnlock: You're not the chest creator!"
-                            logStrAs logError "ERROR delayUnlock: Invalid password!"
+                        you            = d { _chestDeadline = deadline }
+                        builinDatum    = Ledger.Datum
+                                        $ PlutusTx.toBuiltinData you
+                        builinRedeemer = Ledger.Redeemer
+                                        $ PlutusTx.toBuiltinData
+                                            ChestRedeemer
+                                            { _redeemTime     = deadline
+                                            , _redeemPKH      = pkh
+                                            , _redeemPassword = hashString $ _password params
+                                            , _redeemAction   = ActionDelayUnlock
+                                            }
+                        txn            =    (you `mustPayToTheScript` (_ciTxOutValue scriptChainIndexTxOut)
+                                            ) <>
+                                            (mustSpendScriptOutput txOutRef builinRedeemer
+                                            ) <>
+                                            (mustIncludeDatum builinDatum
+                                            )
+                    logStrShowAs logInfo "Delaying unlock for " you
+                    void $ submitTxConstraintsWith @Morbid validity txn
                 _ -> do
                     logStrShowAs logError "ERROR delayUnlock: UTXOs are " utxoS
         ){-
@@ -336,7 +350,7 @@ delayUnlock = endpoint @"3. Delay Unlock" $ \ params -> do
         (logStrAs logError "ERROR delayUnlock: Cannot delay unlock as there is no chest yet, please create one first!")
     
 
--- | Unlock Chest contract endpoint, anyone can redeem the chest contents when the deadline has passed
+-- | Unlock Chest contract endpoint, anyone can redeem the chest contents when the deadline had passed
 unlockChest :: (AsContractError x) =>
     MorbidPromise x ()
 unlockChest = endpoint @"4. Unlock Chest" $ \ _ -> do
@@ -349,27 +363,25 @@ unlockChest = endpoint @"4. Unlock Chest" $ \ _ -> do
                     now <- currentTime
                     logStrShowAs logInfo "Curr slot time = " now
                     
-                    if chestDeadline <= now
-                        then do
-                            let you = ChestRedeemer now
-                                txn = collectFromScript utxoS you
-                            
-                            logStrShowAs logInfo "Unlocking chest for " you
-                            void $ submitTxConstraintsSpending typedValidator utxoS txn
-                        else do
-                            logStrAs logError "ERROR unlockChest: Chest deadline has not been reached yet!"
+                    pkh <- ownPaymentPubKeyHash
+                    logStrShowAs logInfo "OwnPubKeyHash is " pkh
+                    
+                    let you = ChestRedeemer
+                            { _redeemTime     = now
+                            , _redeemPKH      = pkh
+                            , _redeemPassword = hashString ""
+                            , _redeemAction   = ActionUnlockChest
+                            }
+                        txn = collectFromScript utxoS you
+                    
+                    logStrShowAs logInfo "Unlocking chest for " you
+                    void $ submitTxConstraintsSpending typedValidator utxoS txn
                 _ -> do
                     logStrShowAs logError "ERROR unlockChest: UTXOs are " utxoS
         ){-
     otherwise-}-- >>
         (logStrAs logError "ERROR unlockChest: There is no chest to unlock!")
     
-
-{-dummy :: (AsContractError x) =>
-    MorbidPromise x ()
-dummy = endpoint @"Dummy" $ \ _ -> do
-    pkh <- ownPaymentPubKeyHash
-    logStrShowAs logInfo "Dummy PKH is " pkh-}
 
 ------------------------------------------------------------ CONTRACT DEFINITIONS ------------------------------------------------------------
 
@@ -380,13 +392,11 @@ endpoints = selectList
             , addTreasure
             , delayUnlock
             , unlockChest
-            -- , dummy
             ]
 type MorbidSchema = Endpoint "1. Create Chest" CreateChest
                 .\/ Endpoint "2. Add Treasure" AddTreasure
                 .\/ Endpoint "3. Delay Unlock" DelayUnlock
                 .\/ Endpoint "4. Unlock Chest" UnlockChest
-                -- .\/ Endpoint "Dummy" ()
 mkSchemaDefinitions ''MorbidSchema
 
 $(mkKnownCurrencies [])
