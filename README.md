@@ -2,9 +2,9 @@
 Plutus Playground Server with an additional tab for [Dead-man's Switch (ariady-putra/morbid: Davy Jones' Locker)](https://github.com/ariady-putra/morbid).
 <img src="https://github.com/ariady-putra/plutus-playground-server/blob/main/screenshots/0_DeadManSwitch.png"/>
 
-Updated for [week 6](https://github.com/input-output-hk/plutus-pioneer-program/blob/main/code/week06/cabal.project#L45) of Plutus Pioneer Program.
+### Updated for [week 6](https://github.com/input-output-hk/plutus-pioneer-program/blob/main/code/week06/cabal.project#L45) of Plutus Pioneer Program
 [`plutus-playground-start-client.sh`](plutus-playground-start-client.sh#L4):
-```nix-shell
+```nix
 cd plutus-playground-client
 plutus-playground-generate-purs
 npm start
