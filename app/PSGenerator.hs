@@ -47,7 +47,7 @@ import Interpreter qualified as Webghc
 import Language.Haskell.Interpreter (CompilationError, InterpreterError, InterpreterResult (InterpreterResult),
                                      SourceCode (SourceCode), Warning, result, warnings)
 import Language.PureScript.Bridge (BridgePart, Language (Haskell), SumType, argonaut, buildBridge, equal, genericShow,
-                                   mkSumType, order, writePSTypes)
+                                   mkSumType, order)
 import Language.PureScript.Bridge.TypeParameters (A)
 import Ledger.CardanoWallet qualified as CW
 import Ledger.Tx.CardanoAPI (ToCardanoError)
@@ -65,8 +65,8 @@ import Playground.Usecases qualified as Usecases
 import Plutus.Contract.Checkpoint (CheckpointKey, CheckpointLogMsg)
 import Schema (FormSchema, formArgumentToJson)
 import Servant ((:<|>))
-import Servant.PureScript (HasBridge, Settings, apiModuleName, defaultBridge, defaultSettings, languageBridge,
-                           writeAPIModuleWithSettings)
+import Servant.PureScript (HasBridge, Settings, addTypes, apiModuleName, defaultBridge, defaultSettings,
+                           generateWithSettings, languageBridge)
 import Starter qualified
 import StarterSimulations qualified
 import System.FilePath ((</>))
@@ -137,7 +137,9 @@ myTypes =
     ]
 
 mySettings :: Settings
-mySettings = defaultSettings & set apiModuleName "Playground.Server"
+mySettings = defaultSettings
+    & set apiModuleName "Playground.Server"
+    & addTypes myTypes
 
 multilineString :: Text -> Text -> Text
 multilineString name value =
@@ -225,14 +227,11 @@ toExpression = traverse (fmap encodeToText . formArgumentToJson)
 ------------------------------------------------------------
 generate :: FilePath -> IO ()
 generate outputDir = do
-    writePSTypes outputDir (buildBridge myBridge) myTypes
-    writeAPIModuleWithSettings
+    generateWithSettings
         mySettings
         outputDir
         myBridgeProxy
-        (Proxy
-             @(API.API
-               :<|> Auth.FrontendAPI))
+        (Proxy @(API.API :<|> Auth.FrontendAPI))
     writeUsecases outputDir
     writeTestData outputDir
     putStrLn $ "Done: " <> outputDir
