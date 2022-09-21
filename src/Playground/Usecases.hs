@@ -27,6 +27,12 @@ game = process $(makeRelativeToProject "usecases/Game.hs" >>= embedFile)
 morbid :: SourceCode
 morbid = process $(makeRelativeToProject "usecases/Morbid.hs" >>= embedFile)
 
+typed :: SourceCode
+typed = process $(makeRelativeToProject "usecases/Week02/Typed.hs" >>= embedFile)
+
+signed :: SourceCode
+signed = process $(makeRelativeToProject "usecases/Week05/Signed.hs" >>= embedFile)
+
 errorHandling :: SourceCode
 errorHandling =
     process $(makeRelativeToProject "usecases/ErrorHandling.hs" >>= embedFile)

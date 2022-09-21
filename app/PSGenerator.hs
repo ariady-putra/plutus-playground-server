@@ -39,6 +39,9 @@ import ErrorHandling qualified
 import ErrorHandlingSimulations qualified
 import Game qualified
 import GameSimulations qualified
+import Week02.Typed qualified
+import Week05.Signed qualified
+import NoSimulation qualified
 import Morbid qualified
 import MorbidSimulations qualified
 import HelloWorld qualified
@@ -60,7 +63,7 @@ import Playground.Types (CompilationResult (CompilationResult), ContractCall, Co
                          contractDemoContext, contractDemoEditorContents, contractDemoName, contractDemoSimulations,
                          functionSchema, knownCurrencies, program, simulationActions, simulationWallets, sourceCode,
                          wallets)
-import Playground.Usecases (crowdFunding, errorHandling, game, starter, vesting, morbid)
+import Playground.Usecases (crowdFunding, errorHandling, game, starter, vesting, morbid, typed, signed)
 import Playground.Usecases qualified as Usecases
 import Plutus.Contract.Checkpoint (CheckpointKey, CheckpointLogMsg)
 import Schema (FormSchema, formArgumentToJson)
@@ -162,6 +165,8 @@ writeUsecases outputDir = do
             sourceCodeExport "vesting" vesting <>
             sourceCodeExport "game" game <>
             sourceCodeExport "morbid" morbid <>
+            sourceCodeExport "typed" typed <>
+            sourceCodeExport "signed" signed <>
             sourceCodeExport "crowdFunding" crowdFunding <>
             sourceCodeExport "errorHandling" errorHandling <>
             sourceCodeExport "starter" starter <>
@@ -281,6 +286,18 @@ contractDemos =
           MorbidSimulations.simulations
           Morbid.schemas
           Morbid.registeredKnownCurrencies
+    , mkContractDemo
+          "Typed"
+          Usecases.typed
+          (NoSimulation.sim Week02.Typed.registeredKnownCurrencies)
+          Week02.Typed.schemas
+          Week02.Typed.registeredKnownCurrencies
+    , mkContractDemo
+          "Signed"
+          Usecases.signed
+          (NoSimulation.sim Week05.Signed.registeredKnownCurrencies)
+          Week05.Signed.schemas
+          Week05.Signed.registeredKnownCurrencies
     ]
 
 mkContractDemo ::

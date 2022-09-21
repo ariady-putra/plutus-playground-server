@@ -17,6 +17,8 @@ data-files:
     usecases/ErrorHandling.hs
     usecases/Game.hs
     usecases/Morbid.hs
+    usecases/Week02/Typed.hs
+    usecases/Week05/Signed.hs
     usecases/Vesting.hs
     usecases/Starter.hs
     test/gists1.json
@@ -44,6 +46,9 @@ library
         GameSimulations
         Morbid
         MorbidSimulations
+        Week02.Typed
+        Week05.Signed
+        NoSimulation
         HelloWorld
         HelloWorldSimulations
         SimulationUtils
@@ -108,6 +113,9 @@ library plutus-playground-usecases
         GameSimulations
         Morbid
         MorbidSimulations
+        Week02.Typed
+        Week05.Signed
+        NoSimulation
         HelloWorld
         HelloWorldSimulations
         SimulationUtils
@@ -163,6 +171,9 @@ executable plutus-playground-server
         GameSimulations
         Morbid
         MorbidSimulations
+        Week02.Typed
+        Week05.Signed
+        NoSimulation
         HelloWorld
         HelloWorldSimulations
         SimulationUtils
