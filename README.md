@@ -1,16 +1,12 @@
 # plutus-playground-server
-
 Plutus Playground Server with additional tabs for:
-
 - [Dead-man's Switch (ariady-putra/morbid: Davy Jones' Locker)](https://github.com/ariady-putra/morbid)
-- [Week02 (Plutus Pioneer Program)](https://github.com/input-output-hk/plutus-pioneer-program/tree/main/code/week02)
-- [Week05 (Plutus Pioneer Program)](https://github.com/input-output-hk/plutus-pioneer-program/tree/main/code/week05)
-  <img src="screenshots/A_HomePage.png"/>
+- [Week02/Typed (Plutus Pioneer Program)](https://github.com/input-output-hk/plutus-pioneer-program/tree/main/code/week02)
+- [Week05/Signed (Plutus Pioneer Program)](https://github.com/input-output-hk/plutus-pioneer-program/tree/main/code/week05)
+<img src="screenshots/A_HomePage.png"/>
 
 ### Updated for [week 6](https://github.com/input-output-hk/plutus-pioneer-program/blob/main/code/week06/cabal.project#L45) of Plutus Pioneer Program
-
 [`plutus-playground-start-client.sh`](plutus-playground-start-client.sh#L4):
-
 ```nix
 cd plutus-playground-client
 plutus-playground-generate-purs
