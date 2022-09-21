@@ -69,8 +69,8 @@ give amount = do
     let tx = mustPayToTheScript () $ Ada.lovelaceValueOf amount  -- This TX needs an output, that is going to the Script Address.
     ledgerTx <- submitTxConstraints typedValidator tx            -- This line submits the TX.
     void $ awaitTxConfirmed $ getCardanoTxId ledgerTx            -- This line waits for confirmation.
-    logInfo @String $ printf "made a gift of %d lovelace" amount -- This line logs info,
-                                                                 -- usable on the Plutus Playground.
+    logInfo @String $ printf "made a gift of %d lovelace" amount -- This line logs info, usable on the Plutus Playground.
+
 grab :: forall w s e. AsContractError e => Integer -> Contract w s e ()
 grab r = do
     utxos <- utxosAt scrAddress            -- This will find all the UTXOs that sit at the script address.
@@ -81,8 +81,6 @@ grab r = do
         tx :: TxConstraints Void Void
         tx      = mconcat [mustSpendScriptOutput oref $ Redeemer $ Builtins.mkI r | oref <- orefs] -- Defines the TX giving constrains,
                                                                                                    -- one for each UTXO sitting on this addr.
-                                                                                                   -- Must provides a redeemer
-                                                                                                   -- (ignored in this case).
     ledgerTx <- submitTxConstraintsWith @Void lookups tx -- Allows the wallet to construct the TX with the necesary information. 
     void $ awaitTxConfirmed $ getCardanoTxId ledgerTx    -- Waits for confirmation.
     logInfo @String $ "collected gifts"                  -- Logs information.
